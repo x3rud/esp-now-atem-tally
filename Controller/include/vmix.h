@@ -9,3 +9,4 @@
 
 void vmix_setup();
 void vmix_loop();
+void vmix_stop();

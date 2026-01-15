@@ -48,3 +48,9 @@ void vmix_loop() {
     vmix_setup();
   }
 }
+
+void vmix_stop() {
+  if (tcpclient.connected()) {
+    tcpclient.stop();
+  }
+}

@@ -152,15 +152,23 @@ void obs_setup() {
     .uri = uri,
     .port = config.obsPort,
   };
+  obs_stop();
   client = esp_websocket_client_init(&ws_cfg);
   esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);
   esp_websocket_client_start(client);
 }
 
 void obs_loop() {
-  espnow_loop();
-  if (!esp_websocket_client_is_connected(client)) {
-    esp_websocket_client_destroy(client);
+  if (!client || !esp_websocket_client_is_connected(client)) {
+    obs_stop();
     obs_setup();
+  }
+}
+
+void obs_stop() {
+  if (client) {
+    esp_websocket_client_stop(client);
+    esp_websocket_client_destroy(client);
+    client = nullptr;
   }
 }

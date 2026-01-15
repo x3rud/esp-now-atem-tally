@@ -9,8 +9,13 @@
 #include "atem.h"
 #include "obs.h"
 #include "vmix.h"
+#include "display.h"
 
 struct controller_config config;
+static bool protocolRunning = false;
+
+void startProtocol();
+void stopProtocol();
 
 void readConfig()
 {
@@ -26,6 +31,11 @@ void readConfig()
     // config.obsIP = IPAddress(192,168,2,24);
     config.obsIP = (uint32_t)IPAddress(192,168,88,21);
     config.obsPort = 4455;
+    config.protocolEnabled = true;
+  } else {
+    if (config.protocolEnabled != 0 && config.protocolEnabled != 1) {
+      config.protocolEnabled = true;
+    }
   }
   EEPROM.end();
 }	
@@ -52,6 +62,7 @@ void setup()
   Serial.printf("protocol=%d\n", config.protocol);
   setupWebserver();
   espnow_setup();
+  statusDisplaySetup();
   
   if (esp_err_t err = mdns_init()) {
     Serial.printf("MDNS Init failed: %d\n", err);
@@ -60,16 +71,37 @@ void setup()
   mdns_instance_name_set("TallyBridge");
   mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
 
-  if (config.protocol == PROTOCOL_ATEM) atem_setup();
-  else if (config.protocol == PROTOCOL_OBS) obs_setup();
-  else if (config.protocol == PROTOCOL_VMIX) vmix_setup();
+  if (config.protocolEnabled) startProtocol();
+  else Serial.println("Protocol disabled; not connecting to switcher.");
 }
 
 void loop()
 {
-  if (config.protocol == PROTOCOL_ATEM) atem_loop();
-  else if (config.protocol == PROTOCOL_OBS) obs_loop();
-  else if (config.protocol == PROTOCOL_VMIX) vmix_loop();
+  if (config.protocolEnabled && !protocolRunning) startProtocol();
+  else if (!config.protocolEnabled && protocolRunning) stopProtocol();
+
+  if (config.protocolEnabled && protocolRunning) {
+    if (config.protocol == PROTOCOL_ATEM) atem_loop();
+    else if (config.protocol == PROTOCOL_OBS) obs_loop();
+    else if (config.protocol == PROTOCOL_VMIX) vmix_loop();
+  }
+  espnow_loop();
   webserverLoop();
+  statusDisplayLoop();
   delay(20);
+}
+
+void startProtocol() {
+  if (protocolRunning || !config.protocolEnabled) return;
+  if (config.protocol == PROTOCOL_ATEM) atem_setup();
+  else if (config.protocol == PROTOCOL_OBS) obs_setup();
+  else if (config.protocol == PROTOCOL_VMIX) vmix_setup();
+  protocolRunning = true;
+}
+
+void stopProtocol() {
+  if (!protocolRunning) return;
+  if (config.protocol == PROTOCOL_OBS) obs_stop();
+  else if (config.protocol == PROTOCOL_VMIX) vmix_stop();
+  protocolRunning = false;
 }

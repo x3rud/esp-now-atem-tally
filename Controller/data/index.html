@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tally Bridge</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #10182b;
+      --panel-2: #0f1627;
+      --accent: #3b82f6;
+      --accent-2: #10b981;
+      --text: #e5ecf5;
+      --muted: #94a3b8;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(59,130,246,0.08), transparent 30%), radial-gradient(circle at 80% 0%, rgba(16,185,129,0.07), transparent 25%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1rem;
+    }
+    h1 { margin: 0 0 0.25rem 0; font-size: 1.4rem; letter-spacing: 0.01em; }
+    h2 { margin: 0 0 0.5rem 0; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    p { margin: 0; }
+    .grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: var(--radius);
+      padding: 1rem;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    }
+    .header {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(16,185,129,0.12));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+    }
+    .pill {
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.03em;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .pill.warn { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.4); color: #fbbf24; }
+    .pill.ok { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.4); color: #34d399; }
+    .pill.danger { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.4); color: #f87171; }
+    .stack { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+    .cams { display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 0.5rem; }
+    .cam {
+      border-radius: 10px;
+      padding: 0.6rem 0.5rem;
+      text-align: center;
+      background: var(--panel-2);
+      border: 1px solid rgba(255,255,255,0.05);
+      cursor: pointer;
+      user-select: none;
+      font-weight: 700;
+      transition: border-color 0.12s ease, transform 0.12s ease, background 0.12s ease;
+    }
+    .cam:hover { transform: translateY(-1px); border-color: rgba(59,130,246,0.35); }
+    .cam.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px rgba(59,130,246,0.35); }
+    .cam.preview { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.6); }
+    .cam.program { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.6); }
+    .controls { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 0.65rem 0.7rem;
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,0.25); }
+    .btn.full { width: 100%; text-align: center; }
+    .btn.accent { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .btn.green { background: linear-gradient(135deg, #16a34a, #10b981); }
+    .btn.red { background: linear-gradient(135deg, #ef4444, #dc2626); }
+    .btn.gray { background: rgba(255,255,255,0.06); color: var(--text); }
+    .inputs { display: grid; gap: 0.5rem; }
+    label { font-size: 0.9rem; color: var(--muted); display: block; margin-bottom: 0.15rem; }
+    input, select {
+      width: 100%;
+      padding: 0.65rem 0.6rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--panel-2);
+      color: var(--text);
+    }
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.35rem;
+    }
+    .segmented button { padding: 0.55rem 0.5rem; font-size: 0.9rem; }
+    .row { display: flex; gap: 0.5rem; align-items: center; }
+    .row.wrap { flex-wrap: wrap; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .stats { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    .stat {
+      padding: 0.75rem;
+      border-radius: 10px;
+      background: var(--panel-2);
+      border: 1px solid rgba(255,255,255,0.05);
+      display: grid;
+      gap: 0.25rem;
+    }
+    .stat span:first-child { color: var(--muted); font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .stat span:last-child { font-weight: 800; font-size: 1.1rem; }
+    a.link { color: var(--accent); text-decoration: none; font-weight: 700; }
+    .hidden { display: none !important; }
+    #deviceList {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 0.75rem;
+    }
+    .device-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+      padding: 0.7rem;
+      border-radius: 10px;
+      background: var(--panel-2);
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .device-row .head {
+      display: flex;
+      gap: 0.8rem;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .device-row .body {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .device-row input {
+      padding: 0.45rem 0.5rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      width: 100%;
+    }
+    .device-actions {
+      display: flex;
+      gap: 0.4rem;
+      justify-content: flex-end;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Tally Bridge</h1>
+      <div class="muted">IP: <span id="ipLabel"></span></div>
+    </div>
+    <div class="stack">
+      <button class="btn gray" id="connectBtn" onclick="toggleConnect()" style="padding:0.55rem 0.9rem;">Start</button>
+      <span class="pill" id="protocolPill">Protocol</span>
+      <span class="pill ok" id="tallyPill">Tallies: --</span>
+      <a class="pill" href="/update">OTA</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Selection</h2>
+      <div class="row wrap" style="margin-bottom:0.5rem;">
+        <button class="btn gray" onclick="selectNone()">Clear</button>
+        <button class="btn gray" onclick="selectAll()">Select All</button>
+        <label style="display:flex; gap:0.35rem; align-items:center; margin:0;">
+          <input type="checkbox" id="multiToggle" style="width:auto;"> Allow multi-select
+        </label>
+      </div>
+      <div class="cams" id="camGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Controls</h2>
+      <div class="controls">
+        <button class="btn red" onclick="sendColor('FF0000')">Red</button>
+        <button class="btn green" onclick="sendColor('00FF00')">Green</button>
+        <button class="btn accent" onclick="sendColor('0000FF')">Blue</button>
+        <button class="btn gray" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);" onclick="sendColor('FFFF00')">Yellow</button>
+        <button class="btn gray" onclick="sendColor('FFFFFF')">White</button>
+      </div>
+      <div class="controls" style="margin-top:0.75rem;">
+        <button class="btn red" onclick="sendBlink('FF0000', true)">Blink Red</button>
+        <button class="btn green" onclick="sendBlink('00FF00', true)">Blink Green</button>
+        <button class="btn accent" onclick="sendBlink('0000FF', true)">Blink Blue</button>
+        <button class="btn gray" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);" onclick="sendBlink('FFFF00', true)">Blink Yellow</button>
+        <button class="btn gray" onclick="sendBlink('000000', false)">Stop Blink</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Configuration</h2>
+      <div class="inputs">
+        <label>Protocol</label>
+        <div class="segmented">
+          <button class="btn gray" data-protocol="1" onclick="setProtocol(this)">ATEM</button>
+          <button class="btn gray" data-protocol="2" onclick="setProtocol(this)">OBS</button>
+          <button class="btn gray" data-protocol="3" onclick="setProtocol(this)">vMix</button>
+        </div>
+        <div id="atemFields" class="proto-fields">
+          <label>ATEM IP</label>
+          <input type="text" id="atemIp" placeholder="192.168.x.x">
+        </div>
+        <div id="obsFields" class="proto-fields hidden">
+          <label>OBS IP</label>
+          <input type="text" id="obsIp" placeholder="192.168.x.x">
+          <label>OBS Port</label>
+          <input type="number" id="obsPort" placeholder="4455">
+        </div>
+        <div id="vmixFields" class="proto-fields hidden">
+          <label>vMix IP</label>
+          <input type="text" id="vmixIp" placeholder="192.168.x.x">
+          <label>vMix Port</label>
+          <input type="number" id="vmixPort" placeholder="8099">
+        </div>
+        <button class="btn full accent" onclick="saveConfig()">Save & Restart</button>
+        <p class="muted">Configuration changes restart the bridge.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Status</h2>
+      <div class="stats">
+        <div class="stat"><span>Tallies</span><span id="tallyCount">--/--</span></div>
+        <div class="stat"><span>Program</span><span id="pgmList">--</span></div>
+        <div class="stat"><span>Preview</span><span id="pvwList">--</span></div>
+        <div class="stat"><span>Last heartbeat</span><span id="lastHb">--</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Devices</h2>
+      <div id="deviceList"></div>
+    </div>
+  </div>
+
+  <script>
+    const camGrid = document.getElementById('camGrid');
+    const selected = new Set();
+    const protocolButtons = Array.from(document.querySelectorAll('[data-protocol]'));
+    let connectEnabled = true;
+    const escapeHtml = (s) => (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    function buildGrid(max = 20) {
+      camGrid.innerHTML = '';
+      for (let i = 1; i <= max; i++) {
+        const btn = document.createElement('div');
+        btn.className = 'cam';
+        btn.textContent = i;
+        btn.dataset.id = i;
+        btn.onclick = () => toggleCam(btn);
+        camGrid.appendChild(btn);
+      }
+    }
+
+    function toggleCam(el) {
+      const id = Number(el.dataset.id);
+      if (!document.getElementById('multiToggle').checked) selectNone();
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      refreshSelection();
+    }
+
+    function selectNone() { selected.clear(); refreshSelection(); }
+    function selectAll() {
+      selected.clear();
+      camGrid.querySelectorAll('.cam').forEach(el => selected.add(Number(el.dataset.id)));
+      refreshSelection();
+    }
+    function refreshSelection() {
+      camGrid.querySelectorAll('.cam').forEach(el => {
+        const id = Number(el.dataset.id);
+        el.classList.toggle('selected', selected.has(id));
+      });
+    }
+    function selectedCsv() { return Array.from(selected).join(','); }
+
+    function post(url) { return fetch(url, { method: 'POST' }); }
+
+    function sendColor(hex) {
+      post(`/set?color=${hex}&i=${selectedCsv()}`);
+    }
+    function sendBlink(hex, enable) {
+      const url = enable ? `/set?blink=${hex}&i=${selectedCsv()}` : `/set?blink=${hex}&i=${selectedCsv()}&off=1`;
+      post(url);
+    }
+
+    function setProtocol(btn) {
+      protocolButtons.forEach(b => b.classList.remove('accent'));
+      btn.classList.add('accent');
+      protocolButtons.forEach(b => b.classList.remove('selected-protocol'));
+      btn.classList.add('selected-protocol');
+      updateProtocolFields(Number(btn.dataset.protocol));
+    }
+    function currentProtocol() {
+      const active = protocolButtons.find(b => b.classList.contains('selected-protocol'));
+      return active ? Number(active.dataset.protocol) : 1;
+    }
+    function saveConfig() {
+      const params = new URLSearchParams({
+        protocol: currentProtocol(),
+        atemip: document.getElementById('atemIp').value,
+        obsip: document.getElementById('obsIp').value,
+        obsport: document.getElementById('obsPort').value,
+        vmixip: document.getElementById('vmixIp').value,
+        vmixport: document.getElementById('vmixPort').value,
+      });
+      post(`/set?${params.toString()}`);
+      alert('Saved. The device will reboot.');
+    }
+
+    function applyConfig(cfg) {
+      document.getElementById('atemIp').value = cfg.atemip || '';
+      document.getElementById('obsIp').value = cfg.obsip || '';
+      document.getElementById('obsPort').value = cfg.obsport || '';
+      document.getElementById('vmixIp').value = cfg.vmixip || '';
+      document.getElementById('vmixPort').value = cfg.vmixport || '';
+      updateConnectUI(cfg.connect !== 0);
+      protocolButtons.forEach(btn => {
+        btn.classList.toggle('selected-protocol', Number(btn.dataset.protocol) === cfg.protocol);
+        btn.classList.toggle('accent', Number(btn.dataset.protocol) === cfg.protocol);
+      });
+      document.getElementById('protocolPill').textContent = protocolLabel(cfg.protocol);
+      updateProtocolFields(cfg.protocol);
+    }
+
+    function protocolLabel(p) {
+      if (p === 1) return 'ATEM';
+      if (p === 2) return 'OBS';
+      if (p === 3) return 'vMix';
+      return 'Unknown';
+    }
+
+    function updateHeaderSeen(active, total) {
+      const pill = document.getElementById('tallyPill');
+      pill.textContent = `Tallies: ${active}/${total}`;
+      pill.classList.toggle('warn', active === 0);
+      pill.classList.toggle('ok', active > 0);
+    }
+
+    function renderTallies(data) {
+      const pgm = Number(data.program || 0);
+      const pvw = Number(data.preview || 0);
+      const ids = camGrid.querySelectorAll('.cam');
+      const pgmList = [];
+      const pvwList = [];
+      ids.forEach((el, idx) => {
+        const bit = 1 << idx;
+        const isPgm = (pgm & bit) === bit;
+        const isPvw = (pvw & bit) === bit;
+        el.classList.toggle('program', isPgm);
+        el.classList.toggle('preview', isPvw);
+        if (isPgm) pgmList.push(idx + 1);
+        if (isPvw) pvwList.push(idx + 1);
+      });
+      document.getElementById('pgmList').textContent = pgmList.length ? pgmList.join(', ') : '--';
+      document.getElementById('pvwList').textContent = pvwList.length ? pvwList.join(', ') : '--';
+    }
+
+    async function pollTallies() {
+      try {
+        const res = await fetch('/tally');
+        if (res.ok) {
+          const data = await res.json();
+          renderTallies(data);
+        }
+      } catch (e) {}
+      setTimeout(pollTallies, 1000);
+    }
+
+    function renderDevices(tallies) {
+      const root = document.getElementById('deviceList');
+      if (!tallies || !tallies.length) {
+        root.innerHTML = '<div class="muted">No devices seen yet.</div>';
+        return;
+      }
+      const seenMacs = new Set();
+      tallies.forEach((t) => {
+        const macKey = (t.mac || '').toUpperCase();
+        seenMacs.add(macKey);
+        let row = root.querySelector(`.device-row[data-mac="${macKey}"]`);
+        const nameVal = escapeHtml(t.name) || '';
+        const macVal = escapeHtml(t.mac) || '';
+        if (!row) {
+          row = document.createElement('div');
+          row.className = 'device-row';
+          row.dataset.id = t.id;
+          row.dataset.mac = macKey;
+          row.innerHTML = `
+            <div class="head">
+              <div class="id-cell"><strong>T${t.id}</strong><div class="muted seen-age" style="font-size:0.8rem;">${t.seen}s</div></div>
+              <div class="mac-cell muted">${macVal}</div>
+              <div class="muted">Signal: ${t.signal ?? '--'} dBm</div>
+            </div>
+            <div class="body">
+              <input type="text" value="${nameVal}" placeholder="Name" data-id="${t.id}" class="name-input">
+              <input type="number" min="1" max="64" value="${t.id}" data-id="${t.id}" class="id-input">
+              <div class="device-actions">
+                <button class="btn gray" onclick="saveDevice('${macKey}', ${t.id})">Save</button>
+                <button class="btn green" onclick="identifyDevice('${macKey}', ${t.id})">Identify</button>
+              </div>
+            </div>
+          `;
+          root.appendChild(row);
+        } else {
+          row.querySelector('.id-cell strong').textContent = `T${t.id}`;
+          row.querySelector('.seen-age').textContent = `${t.seen}s`;
+          row.querySelector('.mac-cell').textContent = macVal;
+          row.dataset.mac = macKey;
+          const nameInput = row.querySelector('.name-input');
+          if (document.activeElement !== nameInput) nameInput.value = nameVal;
+          const idInput = row.querySelector('.id-input');
+          if (document.activeElement !== idInput) idInput.value = t.id;
+          row.querySelector('.device-actions .btn.gray').setAttribute('onclick', `saveDevice('${macKey}', ${t.id})`);
+          row.querySelector('.device-actions .btn.green').setAttribute('onclick', `identifyDevice('${macKey}', ${t.id})`);
+        }
+      });
+      root.querySelectorAll('.device-row').forEach(row => {
+        const macKey = row.dataset.mac || '';
+        if (!seenMacs.has(macKey)) row.remove();
+      });
+    }
+
+    async function saveDevice(macKey, currentId) {
+      const row = document.querySelector(`.device-row[data-mac="${macKey}"]`);
+      const nameInput = row ? row.querySelector('.name-input') : null;
+      const idInput = row ? row.querySelector('.id-input') : null;
+      const newName = nameInput ? nameInput.value : '';
+      const newId = idInput ? idInput.value : currentId;
+      const mac = macKey || '';
+      if (newName) {
+        const url = mac ? `/set?name=${encodeURIComponent(newName)}&mac=${encodeURIComponent(mac)}` : `/set?name=${encodeURIComponent(newName)}&i=${currentId}`;
+        await post(url);
+      }
+      if (newId && Number(newId) !== Number(currentId)) {
+        const url = mac ? `/set?camid=${newId}&mac=${encodeURIComponent(mac)}` : `/set?camid=${newId}&i=${currentId}`;
+        await post(url);
+      }
+    }
+    async function identifyDevice(macKey, currentId) {
+      const row = document.querySelector(`.device-row[data-mac="${macKey}"]`);
+      const mac = macKey || (row ? row.dataset.mac : '');
+      if (mac) {
+        await post(`/set?identify=1&mac=${encodeURIComponent(mac)}&seconds=5`);
+      } else {
+        await post(`/set?identify=1&i=${currentId}&seconds=5`);
+      }
+    }
+
+    async function pollSeen() {
+      try {
+        const res = await fetch('/seen');
+        if (res.ok) {
+          const data = await res.json();
+          const tallies = data.tallies || [];
+          const active = tallies.filter(t => t.seen <= 5).length;
+          updateHeaderSeen(active, tallies.length);
+          const youngest = tallies.reduce((min, t) => Math.min(min, t.seen), Number.MAX_SAFE_INTEGER);
+          document.getElementById('lastHb').textContent = tallies.length ? `${youngest}s ago` : '--';
+          document.getElementById('tallyCount').textContent = `${active}/${tallies.length}`;
+          renderDevices(tallies);
+        }
+      } catch (e) {}
+      setTimeout(pollSeen, 3000);
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        applyConfig(cfg);
+      } catch (e) {}
+    }
+
+    function setIpLabel() {
+      document.getElementById('ipLabel').textContent = window.location.host;
+    }
+
+    function updateConnectUI(enabled) {
+      connectEnabled = enabled;
+      const btn = document.getElementById('connectBtn');
+      btn.textContent = enabled ? 'Stop' : 'Start';
+      btn.classList.remove('gray','red','green');
+      btn.classList.add(enabled ? 'red' : 'green');
+    }
+
+    async function toggleConnect(force) {
+      const next = typeof force === 'boolean' ? force : !connectEnabled;
+      updateConnectUI(next);
+      try {
+        await post(`/set?connect=${next ? 1 : 0}`);
+      } catch (e) {}
+    }
+
+    function updateProtocolFields(protocol) {
+      document.getElementById('atemFields').classList.toggle('hidden', protocol !== 1);
+      document.getElementById('obsFields').classList.toggle('hidden', protocol !== 2);
+      document.getElementById('vmixFields').classList.toggle('hidden', protocol !== 3);
+    }
+
+    buildGrid();
+    setIpLabel();
+    updateProtocolFields(currentProtocol());
+    loadConfig();
+    pollTallies();
+    pollSeen();
+  </script>
+</body>
+</html>
