@@ -5,6 +5,9 @@
 #include <WebServer.h>
 #include <SPIFFS.h>
 #include <Update.h>
+#ifndef DISABLE_WS
+#include <WebSocketsServer.h>
+#endif
 #include "atem.h"
 #include "obs.h"
 #include "espnow.h"
@@ -13,6 +16,9 @@
 static bool eth_connected = false;
 WebServer web(80);
 static bool fs_ready = false;
+#ifndef DISABLE_WS
+WebSocketsServer wsServer(81);
+#endif
 
 IPAddress asIp(uint32_t i) {
   return IPAddress(i);
@@ -83,6 +89,10 @@ void handleConfigJson() {
       t += tallies[i].name;
       t += "\",\"signal\":";
       t += tallies[i].signal;
+      t += ",\"rgbBrightness\":";
+      t += tallies[i].rgbBrightness;
+      t += ",\"statusBrightness\":";
+      t += tallies[i].statusBrightness;
       t += "},";
     }
     if (t[t.length()-1] == ',') t.remove(t.length()-1, 1);
@@ -136,26 +146,31 @@ void handleSet() {
       uint32_t color = parseHexColor(web.arg(i));
       uint64_t bits = bitsFromCSV(web.arg("i"));
       espnow_color(color, &bits);
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
     } else if (name == "program") {
       uint64_t programBits = bitsFromCSV(web.arg(i));
       uint64_t previewBits = bitsFromCSV(web.arg("preview"));
       espnow_tally(&programBits, &previewBits);
-      break;
-    } else if (name == "brightness") {
+      web.send(200, "text/plain", "OK");
+      return;
+    } else if (name == "brightness" && !web.hasArg("mac")) {
       uint64_t bits = bitsFromCSV(web.arg("i"));
       espnow_brightness(web.arg(i).toInt(), &bits);
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
     } else if (name == "camid" && !web.hasArg("mac")) {
       uint64_t bits = bitsFromCSV(web.arg("i"));
       espnow_camid(web.arg(i).toInt(), &bits);
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
     } else if (name == "signal") {
       uint64_t bits = bitsFromCSV(web.arg("i"));
       long signal = web.arg(i).toInt();
       espnow_signal(signal, &bits);
       if (config.protocol == PROTOCOL_OBS) obs_broadcast_signal(bits, signal);
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
     } else if (name == "protocol") {
       config.protocol = (switcher_protocol) web.arg(i).toInt();
       if (config.protocol != PROTOCOL_ATEM && config.protocol != PROTOCOL_OBS && config.protocol != PROTOCOL_VMIX) return;
@@ -200,12 +215,13 @@ void handleSet() {
           nib++;
           if (nib == 2) { mac[idx++] = val; val = 0; nib = 0; }
         }
-        if (idx == 6) espnow_set_name_mac(web.arg(i), mac);
+      if (idx == 6) espnow_set_name_mac(web.arg(i), mac);
       } else {
         uint64_t bits = bitsFromCSV(web.arg("i"));
         espnow_set_name(web.arg(i), &bits);
       }
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
     } else if (name == "identify") {
       uint8_t seconds = web.hasArg("seconds") ? web.arg("seconds").toInt() : 5;
       if (web.hasArg("mac")) {
@@ -228,13 +244,15 @@ void handleSet() {
         uint64_t bits = bitsFromCSV(web.arg("i"));
         espnow_identify(&bits, seconds);
       }
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
     } else if (name == "blink") {
       uint64_t bits = bitsFromCSV(web.arg("i"));
       uint32_t color = parseHexColor(web.arg(i));
       bool enable = !web.hasArg("off");
       espnow_blink(color, enable, &bits);
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
     } else if (name == "camid" && web.hasArg("mac")) {
       uint8_t mac[6];
       String macStr = web.arg("mac");
@@ -252,11 +270,50 @@ void handleSet() {
         uint8_t newId = web.arg(i).toInt();
         espnow_set_camid_mac(newId, mac);
       }
-      break;
+      web.send(200, "text/plain", "OK");
+      return;
+    } else if (name == "brightness" && web.hasArg("mac")) {
+      uint8_t mac[6];
+      String macStr = web.arg("mac");
+      macStr.toUpperCase();
+      int idx = 0, val = 0, nib = 0;
+      for (size_t k=0; k<macStr.length() && idx<6; k++) {
+        char c = macStr[k];
+        if (c == ':' || c == '-') continue;
+        if (c >= '0' && c <= '9') val = (val << 4) + c - '0';
+        else if (c >= 'A' && c <= 'F') val = (val << 4) + c - 'A' + 10;
+        nib++;
+        if (nib == 2) { mac[idx++] = val; val = 0; nib = 0; }
+      }
+      if (idx == 6) {
+        uint8_t b = web.arg(i).toInt();
+        espnow_brightness_mac(b, mac);
+      }
+      web.send(200, "text/plain", "OK");
+      return;
+    } else if (name == "statusbrightness" && web.hasArg("mac")) {
+      uint8_t mac[6];
+      String macStr = web.arg("mac");
+      macStr.toUpperCase();
+      int idx = 0, val = 0, nib = 0;
+      for (size_t k=0; k<macStr.length() && idx<6; k++) {
+        char c = macStr[k];
+        if (c == ':' || c == '-') continue;
+        if (c >= '0' && c <= '9') val = (val << 4) + c - '0';
+        else if (c >= 'A' && c <= 'F') val = (val << 4) + c - 'A' + 10;
+        nib++;
+        if (nib == 2) { mac[idx++] = val; val = 0; nib = 0; }
+      }
+      if (idx == 6) {
+        uint8_t b = web.arg(i).toInt();
+        espnow_status_brightness(b, mac);
+      }
+      web.send(200, "text/plain", "OK");
+      return;
     }
   }
   web.send(200, "text/plain", "OK");
-  delay(10);
+  // immediate return; no delay
   if (configUpdated) {
     writeConfig();
     ESP.restart();
@@ -289,6 +346,10 @@ void handleSeen() {
     s += tallies[i].name;
     s += "\", \"signal\":";
     s += tallies[i].signal;
+    s += ", \"rgbBrightness\":";
+    s += tallies[i].rgbBrightness;
+    s += ", \"statusBrightness\":";
+    s += tallies[i].statusBrightness;
     s += "},";
   }
   if (s[s.length()-1] == ',') s.remove(s.length()-1, 1); // remove last ,
@@ -296,9 +357,61 @@ void handleSeen() {
   web.send(200, "application/json", s);
 }
 
+String buildTallyPayload() {
+  String s = "{\"program\":";
+  s += String(programBits);
+  s += ",\"preview\":";
+  s += String(previewBits);
+  s += "}";
+  return s;
+}
+
+String buildDevicesPayload() {
+  String s = "{\"tallies\":[";
+  espnow_tally_info_t *tallies = espnow_tallies();
+  unsigned long now = millis();
+  for (int i=0; i<64; i++) {
+    if (tallies[i].id == 0) continue;
+    char macbuf[18];
+    sprintf(macbuf, "%02X:%02X:%02X:%02X:%02X:%02X",
+            tallies[i].mac_addr[0], tallies[i].mac_addr[1], tallies[i].mac_addr[2],
+            tallies[i].mac_addr[3], tallies[i].mac_addr[4], tallies[i].mac_addr[5]);
+    s += "{\"id\":";
+    s += tallies[i].id;
+    s += ",\"seen\":";
+    s += ((now - tallies[i].last_seen) / 1000);
+    s += ",\"mac\":\"";
+    s += macbuf;
+    s += "\",\"name\":\"";
+    s += tallies[i].name;
+    s += "\",\"signal\":";
+    s += tallies[i].signal;
+    s += ",\"rgbBrightness\":";
+    s += tallies[i].rgbBrightness;
+    s += ",\"statusBrightness\":";
+    s += tallies[i].statusBrightness;
+    s += "},";
+  }
+  if (s[s.length()-1] == ',') s.remove(s.length()-1, 1); // remove last ,
+  s += "]}";
+  return s;
+}
+
+void broadcastState() {
+#ifdef DISABLE_WS
+  return;
+#else
+  if (wsServer.connectedClients() == 0) return;
+  String t = buildTallyPayload();
+  String d = buildDevicesPayload();
+  wsServer.broadcastTXT("{\"type\":\"tally\",\"data\":" + t + "}");
+  wsServer.broadcastTXT("{\"type\":\"devices\",\"data\":" + d + "}");
+#endif
+}
+
 void handleUpdatePage() {
-  const char* page = R"(<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>OTA Update</title><style>body{font-family:Arial, sans-serif; background:#0f172a; color:#e2e8f0; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;} .card{background:#111827; padding:1.5rem; border-radius:12px; width:90%; max-width:480px; box-shadow:0 20px 50px rgba(0,0,0,0.35);} h1{margin:0 0 1rem 0; font-size:1.4rem;} label{display:block; margin:1rem 0; padding:0.8rem; border:1px dashed #334155; border-radius:10px; cursor:pointer; text-align:center;} input[type=file]{display:none;} button{width:100%; padding:0.9rem; border:none; border-radius:10px; background:#22c55e; color:#0b1727; font-weight:700; cursor:pointer; font-size:1rem;} button:disabled{background:#334155; color:#94a3b8;} .status{margin-top:0.8rem; font-size:0.9rem; min-height:1.2rem;}</style></head><body><div class='card'><h1>OTA Firmware Update</h1><form method='POST' action='/update' enctype='multipart/form-data'><label id='label'><span id='labelText'>Choose firmware (.bin)</span><input type='file' name='firmware' id='file'></label><button id='btn' type='submit' disabled>Upload & Restart</button><div class='status' id='status'></div></form></div><script>const file=document.getElementById('file');const btn=document.getElementById('btn');const text=document.getElementById('labelText');const status=document.getElementById('status');file.addEventListener('change',()=>{if(file.files.length){text.textContent=file.files[0].name;btn.disabled=false;status.textContent='';}});document.querySelector('form').addEventListener('submit',(e)=>{if(!file.files.length){e.preventDefault();return;}status.textContent='Uploading...';btn.disabled=true;});</script></body></html>)";
-  web.send(200, "text/html", page);
+  if (handleFileRead("/ota.html")) return;
+  web.send(500, "text/plain", "ota.html not found");
 }
 
 void handleUpdateUpload() {
@@ -398,8 +511,20 @@ void setupWebserver() {
     web.send(404, "text/plain", "Not found");
   });
   web.begin();
+#ifndef DISABLE_WS
+  wsServer.begin();
+  wsServer.onEvent([](uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+    if (type == WStype_CONNECTED) {
+      wsServer.sendTXT(num, "{\"type\":\"tally\",\"data\":" + buildTallyPayload() + "}");
+      wsServer.sendTXT(num, "{\"type\":\"devices\",\"data\":" + buildDevicesPayload() + "}");
+    }
+  });
+#endif
 }
 
 void webserverLoop() {
   web.handleClient();
+#ifndef DISABLE_WS
+  wsServer.loop();
+#endif
 }

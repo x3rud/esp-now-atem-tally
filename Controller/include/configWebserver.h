@@ -8,3 +8,4 @@
 
 void setupWebserver();
 void webserverLoop();
+void broadcastState();

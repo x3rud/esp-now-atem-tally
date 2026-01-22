@@ -23,6 +23,8 @@ enum espnow_command : uint8_t {
   SET_BLINK = 11,
   SET_CAMID_MAC = 12,
   SET_NAME_MAC = 13,
+  SET_BRIGHTNESS_MAC = 14,
+  SET_STATUS_BRIGHTNESS = 15,
 };
 
 typedef struct esp_now_tally_info {
@@ -31,6 +33,8 @@ typedef struct esp_now_tally_info {
     unsigned long last_seen;
     char name[17];
     int8_t signal;
+    uint8_t rgbBrightness;
+    uint8_t statusBrightness;
 } espnow_tally_info_t;
 
 espnow_tally_info_t * espnow_tallies();
@@ -53,3 +57,5 @@ void espnow_identify_mac(const uint8_t mac[6], uint8_t seconds);
 void espnow_blink(uint32_t color, bool enable, uint64_t *bits);
 void espnow_set_camid_mac(uint8_t camId, const uint8_t mac[6]);
 void espnow_set_name_mac(const String& name, const uint8_t mac[6]);
+void espnow_brightness_mac(uint8_t brightness, const uint8_t mac[6]);
+void espnow_status_brightness(uint8_t brightness, const uint8_t mac[6]);

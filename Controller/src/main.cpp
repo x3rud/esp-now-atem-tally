@@ -3,6 +3,7 @@
 #include <ATEMstd.h>
 #include <EEPROM.h>
 #include <mdns.h>
+#include <ArduinoOTA.h>
 
 #include "espnow.h"
 #include "configWebserver.h"
@@ -70,6 +71,11 @@ void setup()
   mdns_hostname_set("tally");
   mdns_instance_name_set("TallyBridge");
   mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+  ArduinoOTA.setHostname("tally-controller");
+  ArduinoOTA.onStart([]() { Serial.println("OTA start"); });
+  ArduinoOTA.onEnd([]() { Serial.println("OTA end"); });
+  ArduinoOTA.onError([](ota_error_t error) { Serial.printf("OTA error %u\n", error); });
+  ArduinoOTA.begin();
 
   if (config.protocolEnabled) startProtocol();
   else Serial.println("Protocol disabled; not connecting to switcher.");
@@ -88,6 +94,7 @@ void loop()
   espnow_loop();
   webserverLoop();
   statusDisplayLoop();
+  ArduinoOTA.handle();
   delay(20);
 }
 

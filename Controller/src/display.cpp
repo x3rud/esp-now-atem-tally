@@ -69,6 +69,14 @@ static void drawStatus() {
   uint8_t totalTallies = espnow_total_tally_count();
   uint8_t activeTallies = espnow_active_tally_count(TALLY_STALE_MS);
   unsigned long lastHbAge = espnow_latest_heartbeat_age();
+  int bestSignal = -128;
+  espnow_tally_info_t *tallies = espnow_tallies();
+  unsigned long now = millis();
+  for (int i=0; i<MAX_TALLY_COUNT; i++) {
+    if (tallies[i].id == 0) continue;
+    if (now - tallies[i].last_seen > TALLY_STALE_MS) continue;
+    if (tallies[i].signal > bestSignal) bestSignal = tallies[i].signal;
+  }
 
   display.clearDisplay();
   display.setTextSize(1);
@@ -93,6 +101,16 @@ static void drawStatus() {
   else {
     display.print(lastHbAge / 1000);
     display.println("s ago");
+  }
+
+  display.print("RSSI: ");
+  if (bestSignal == -128) display.println("--");
+  else {
+    display.print(bestSignal);
+    display.print("dBm ");
+    if (bestSignal > -60) display.println("G");       // good
+    else if (bestSignal > -75) display.println("M");  // mid
+    else display.println("L");                        // low
   }
 
   display.display();

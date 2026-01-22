@@ -169,10 +169,45 @@
       color: var(--text);
       width: 100%;
     }
+    .slider-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.35rem;
+      align-items: center;
+    }
     .device-actions {
       display: flex;
       gap: 0.4rem;
       justify-content: flex-end;
+    }
+    .signal {
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.8rem;
+    }
+    .sig-good { color: #22c55e; border-color: rgba(34,197,94,0.4); }
+    .sig-mid { color: #f59e0b; border-color: rgba(245,158,11,0.4); }
+    .sig-bad { color: #ef4444; border-color: rgba(239,68,68,0.4); }
+    .toast {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      background: rgba(17,24,39,0.9);
+      color: #e5ecf5;
+      padding: 0.8rem 1rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 150ms ease, transform 150ms ease;
+      z-index: 9999;
+      font-size: 0.9rem;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
     }
   </style>
 </head>
@@ -261,11 +296,12 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="grid-column: 1/4;">
       <h2>Devices</h2>
       <div id="deviceList"></div>
     </div>
   </div>
+  <div id="toast" class="toast"></div>
 
   <script>
     const camGrid = document.getElementById('camGrid');
@@ -273,6 +309,8 @@
     const protocolButtons = Array.from(document.querySelectorAll('[data-protocol]'));
     let connectEnabled = true;
     const escapeHtml = (s) => (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const sliderTimers = {};
+    const wsConnected = false;
 
     function buildGrid(max = 20) {
       camGrid.innerHTML = '';
@@ -370,6 +408,59 @@
       pill.classList.toggle('ok', active > 0);
     }
 
+    function signalClass(sig) {
+      if (sig === undefined || sig === null) return '';
+      if (sig > -60) return 'sig-good';
+      if (sig > -75) return 'sig-mid';
+      return 'sig-bad';
+    }
+
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 1500);
+    }
+
+    function lockOnFocus(el) {
+      if (!el) return;
+      el.addEventListener('focus', () => { el.dataset.locked = '1'; });
+      el.addEventListener('blur', () => { delete el.dataset.locked; });
+    }
+
+    function scheduleSlider(urlKey, url) {
+      if (sliderTimers[urlKey]) clearTimeout(sliderTimers[urlKey]);
+      sliderTimers[urlKey] = setTimeout(() => {
+        post(url);
+        delete sliderTimers[urlKey];
+      }, 200);
+    }
+
+    function attachSliderHandlers(row, mac) {
+      const rgbInput = row.querySelector('.rgb-input');
+      const statusInput = row.querySelector('.status-input');
+      if (rgbInput) {
+        rgbInput.addEventListener('input', () => {
+          const url = `/set?brightness=${rgbInput.value}&mac=${encodeURIComponent(mac)}`;
+          scheduleSlider(`rgb-${mac}`, url);
+        });
+        rgbInput.addEventListener('change', () => {
+          const url = `/set?brightness=${rgbInput.value}&mac=${encodeURIComponent(mac)}`;
+          post(url);
+        });
+      }
+      if (statusInput) {
+        statusInput.addEventListener('input', () => {
+          const url = `/set?statusbrightness=${statusInput.value}&mac=${encodeURIComponent(mac)}`;
+          scheduleSlider(`status-${mac}`, url);
+        });
+        statusInput.addEventListener('change', () => {
+          const url = `/set?statusbrightness=${statusInput.value}&mac=${encodeURIComponent(mac)}`;
+          post(url);
+        });
+      }
+    }
+
     function renderTallies(data) {
       const pgm = Number(data.program || 0);
       const pvw = Number(data.preview || 0);
@@ -413,6 +504,8 @@
         let row = root.querySelector(`.device-row[data-mac="${macKey}"]`);
         const nameVal = escapeHtml(t.name) || '';
         const macVal = escapeHtml(t.mac) || '';
+        const rgbVal = t.rgbBrightness ?? 255;
+        const statusVal = t.statusBrightness ?? 255;
         if (!row) {
           row = document.createElement('div');
           row.className = 'device-row';
@@ -420,13 +513,21 @@
           row.dataset.mac = macKey;
           row.innerHTML = `
             <div class="head">
-              <div class="id-cell"><strong>T${t.id}</strong><div class="muted seen-age" style="font-size:0.8rem;">${t.seen}s</div></div>
+              <div class="id-cell"><strong>T${t.id}</strong><div class="muted seen-age" style="font-size:0.8rem;">${t.seen > 5 ? 'Offline' : t.seen + 's'}</div></div>
               <div class="mac-cell muted">${macVal}</div>
-              <div class="muted">Signal: ${t.signal ?? '--'} dBm</div>
+              <div class="signal ${signalClass(t.signal)}">Signal: ${t.signal ?? '--'} dBm</div>
             </div>
             <div class="body">
               <input type="text" value="${nameVal}" placeholder="Name" data-id="${t.id}" class="name-input">
               <input type="number" min="1" max="64" value="${t.id}" data-id="${t.id}" class="id-input">
+              <div class="slider-row">
+                <input type="range" min="0" max="255" value="${rgbVal}" class="rgb-input" data-initial="${rgbVal}" data-mac="${macKey}">
+                <span class="muted" style="font-size:0.8rem;">RGB</span>
+              </div>
+              <div class="slider-row">
+                <input type="range" min="0" max="255" value="${statusVal}" class="status-input" data-initial="${statusVal}" data-mac="${macKey}">
+                <span class="muted" style="font-size:0.8rem;">Status</span>
+              </div>
               <div class="device-actions">
                 <button class="btn gray" onclick="saveDevice('${macKey}', ${t.id})">Save</button>
                 <button class="btn green" onclick="identifyDevice('${macKey}', ${t.id})">Identify</button>
@@ -434,15 +535,35 @@
             </div>
           `;
           root.appendChild(row);
+          lockOnFocus(row.querySelector('.name-input'));
+          lockOnFocus(row.querySelector('.id-input'));
+          const rgbInput = row.querySelector('.rgb-input');
+          const statusInput = row.querySelector('.status-input');
+          lockOnFocus(rgbInput);
+          lockOnFocus(statusInput);
+          attachSliderHandlers(row, macKey);
         } else {
           row.querySelector('.id-cell strong').textContent = `T${t.id}`;
-          row.querySelector('.seen-age').textContent = `${t.seen}s`;
+          row.querySelector('.seen-age').textContent = (t.seen > 5) ? 'Offline' : `${t.seen}s`;
           row.querySelector('.mac-cell').textContent = macVal;
+          const sigEl = row.querySelector('.signal');
+          sigEl.textContent = `Signal: ${t.signal ?? '--'} dBm`;
+          sigEl.className = `signal ${signalClass(t.signal)}`;
           row.dataset.mac = macKey;
           const nameInput = row.querySelector('.name-input');
-          if (document.activeElement !== nameInput) nameInput.value = nameVal;
+          if (!nameInput.dataset.locked) nameInput.value = nameVal;
           const idInput = row.querySelector('.id-input');
-          if (document.activeElement !== idInput) idInput.value = t.id;
+          if (!idInput.dataset.locked) idInput.value = t.id;
+          const rgbInput = row.querySelector('.rgb-input');
+          if (!rgbInput.dataset.locked) {
+            rgbInput.dataset.initial = rgbVal;
+            rgbInput.value = rgbVal;
+          }
+          const statusInput = row.querySelector('.status-input');
+          if (!statusInput.dataset.locked) {
+            statusInput.dataset.initial = statusVal;
+            statusInput.value = statusVal;
+          }
           row.querySelector('.device-actions .btn.gray').setAttribute('onclick', `saveDevice('${macKey}', ${t.id})`);
           row.querySelector('.device-actions .btn.green').setAttribute('onclick', `identifyDevice('${macKey}', ${t.id})`);
         }
@@ -457,6 +578,8 @@
       const row = document.querySelector(`.device-row[data-mac="${macKey}"]`);
       const nameInput = row ? row.querySelector('.name-input') : null;
       const idInput = row ? row.querySelector('.id-input') : null;
+      const rgbInput = row ? row.querySelector('.rgb-input') : null;
+      const statusInput = row ? row.querySelector('.status-input') : null;
       const newName = nameInput ? nameInput.value : '';
       const newId = idInput ? idInput.value : currentId;
       const mac = macKey || '';
@@ -468,6 +591,15 @@
         const url = mac ? `/set?camid=${newId}&mac=${encodeURIComponent(mac)}` : `/set?camid=${newId}&i=${currentId}`;
         await post(url);
       }
+      if (rgbInput) {
+        const url = `/set?brightness=${rgbInput.value}&mac=${encodeURIComponent(mac)}`;
+        await post(url);
+      }
+      if (statusInput) {
+        const url = `/set?statusbrightness=${statusInput.value}&mac=${encodeURIComponent(mac)}`;
+        await post(url);
+      }
+      toast("Saved");
     }
     async function identifyDevice(macKey, currentId) {
       const row = document.querySelector(`.device-row[data-mac="${macKey}"]`);

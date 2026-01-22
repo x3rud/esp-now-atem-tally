@@ -8,6 +8,7 @@
 #include "atem.h"
 #include "espnow.h"
 #include "vmixServer.h"
+#include "configWebserver.h" // for broadcastState declaration
 
 // Broadcast address, sends to all devices nearby
 uint8_t broadcast_mac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -81,6 +82,7 @@ void espnow_tally(uint64_t *program, uint64_t *preview) {
   previewBits = *preview;
   if (result != ESP_OK) Serial.println("esp_now_send != OK");
   vmix_tally(program, preview);
+  broadcastState();
 }
 
 void switchCamId(uint8_t id1, uint8_t id2) {
@@ -97,6 +99,16 @@ void espnow_brightness(uint8_t brightness, uint64_t *bits) {
   if (!esp_now_send(broadcast_mac, payload, sizeof(payload))) {
     Serial.println("esp_now_send != OK");
   }
+}
+
+void espnow_brightness_mac(uint8_t brightness, const uint8_t mac[6]) {
+  if (!mac) return;
+  uint8_t payload[1 + 1 + 6];
+  payload[0] = SET_BRIGHTNESS_MAC;
+  payload[1] = brightness;
+  memcpy(payload + 2, mac, 6);
+  esp_err_t result = esp_now_send(broadcast_mac, payload, sizeof(payload));
+  if (result != ESP_OK) Serial.println("esp_now_send != OK (BRIGHTNESS_MAC)");
 }
 
 void espnow_camid(uint8_t camId, uint64_t *bits) {
@@ -184,6 +196,16 @@ void espnow_set_name_mac(const String& name, const uint8_t mac[6]) {
   if (result != ESP_OK) Serial.println("esp_now_send != OK (NAME_MAC)");
 }
 
+void espnow_status_brightness(uint8_t brightness, const uint8_t mac[6]) {
+  if (!mac) return;
+  uint8_t payload[1 + 1 + 6];
+  payload[0] = SET_STATUS_BRIGHTNESS;
+  payload[1] = brightness;
+  memcpy(payload + 2, mac, 6);
+  esp_err_t result = esp_now_send(broadcast_mac, payload, sizeof(payload));
+  if (result != ESP_OK) Serial.println("esp_now_send != OK (STATUS_BRIGHTNESS)");
+}
+
 // callback when data is sent
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
 {
@@ -199,8 +221,10 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
   switch (command)
   {
   case HEARTBEAT: {
-    // data[1] = id, data[8] = signal, optional: data[9] = nameLen, data[10..] = name
+    // data[1] = id, data[2] = rgb, data[3] = status, data[8] = signal, data[9] = nameLen, data[10..] = name
     int8_t signal = (int8_t)data[8];
+    uint8_t rgb = len > 2 ? data[2] : 255;
+    uint8_t status = len > 3 ? data[3] : 255;
     uint8_t nameLen = 0;
     const char* namePtr = nullptr;
     if (len > 10) {
@@ -215,6 +239,8 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
         tallies[i].id = data[1];
         tallies[i].last_seen = millis();
         tallies[i].signal = signal;
+        tallies[i].rgbBrightness = rgb;
+        tallies[i].statusBrightness = status;
         if (nameLen > 0) {
           uint8_t l = nameLen > 16 ? 16 : nameLen;
           memcpy(tallies[i].name, namePtr, l);
@@ -229,6 +255,8 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
       tallies[freeIdx].id = data[1];
       tallies[freeIdx].last_seen = millis();
       tallies[freeIdx].signal = signal;
+      tallies[freeIdx].rgbBrightness = rgb;
+      tallies[freeIdx].statusBrightness = status;
       if (nameLen > 0) {
         uint8_t l = nameLen > 16 ? 16 : nameLen;
         memcpy(tallies[freeIdx].name, namePtr, l);
@@ -237,6 +265,7 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len)
         tallies[freeIdx].name[0] = 0;
       }
     }
+    broadcastState();
     break;
   }
   
@@ -283,6 +312,9 @@ void espnow_setup()
   for (int i=0; i<MAX_TALLY_COUNT; i++) {
     tallies[i].id = 0;
     tallies[i].name[0] = 0;
+    tallies[i].signal = 0;
+    tallies[i].rgbBrightness = 255;
+    tallies[i].statusBrightness = 255;
   }
 
   vmixServerSetup();
