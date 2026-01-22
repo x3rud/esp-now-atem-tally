@@ -68,3 +68,6 @@ The web UI is served from SPIFFS; if missing, `/` returns 500. Key endpoints:
 - **Receivers not updating**: confirm ESP-NOW channel proximity, check OLED for heartbeat age/RSSI, and verify `program/preview` bits via `/tally`.  
 - **OBS not driving tallies**: scene names must contain tags like `T1`, `T2`, etc., to map to tally IDs; confirm obs-websocket v5 is installed and reachable.
 
+## Know problems
+- **Camera id**: On the receiver the camera ID at each restart of the controller return to 2
+- **Input on webcontroller**: The inputs refreshes the value to fast and it make difficult storing the new values
